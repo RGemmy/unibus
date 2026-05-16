@@ -27,14 +27,15 @@ export default function DriverHome() {
   // Find the driver record that matches the current logged-in user
   const myDriver = (drivers||[]).find(d =>
     d.user_name === user?.user_name ||
-    d.user_id   === user?.id ||
     d.email     === user?.email
   )
 
   // Filter trips assigned to this driver
-  const myTrips = (trips||[]).filter(tr =>
-    myDriver && Number(tr.driver_id) === Number(myDriver.id)
-  )
+  const myTrips = (trips||[]).filter(tr => {
+    if (user?.id && tr.driver_userId && String(tr.driver_userId) === String(user.id)) return true
+    if (myDriver && Number(tr.driver_id) === Number(myDriver.id)) return true
+    return false
+  })
   const completedTrips = myTrips.filter(t => t.status === 'completed')
 
   // رحلات الشهر الحالي — بتعتمد على completed_at اللي بنحطه لما الرحلة تتنهي

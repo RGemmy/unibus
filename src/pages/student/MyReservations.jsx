@@ -556,8 +556,8 @@ function ReservationCard({ r, lang, isMobile, onCancel, onConfirm, onConfirmWith
         </div>
       )}
 
-      {/* ── No Show — اختيار استرداد أو رصيد ─────────────────────────────────── */}
-      {isNoShow && (
+      {/* ── No Show — اختيار استرداد أو رصيد — InstaPay فقط ──────────────────── */}
+      {isNoShow && r.payment_method === 'instapay' && (
         <NoShowResolutionCard
           entry={{
             id:              r.waitlist_entry_id || r.id,
@@ -602,7 +602,7 @@ function ReservationCard({ r, lang, isMobile, onCancel, onConfirm, onConfirmWith
       )}
 
       {/* ── Add Return bundle button ──────────────────────────────────────────── */}
-      {(r.trip_type === 'go' || !r.trip_type) && r.status !== 'cancelled' && !hasReturnForDay && onAddReturn && (
+      {(r.trip_type === 'go' || !r.trip_type) && r.status === 'confirmed' && !hasReturnForDay && onAddReturn && (
         <button
           onClick={() => onAddReturn(r)}
           style={{ marginTop:10, width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
@@ -956,7 +956,7 @@ export default function MyReservations() {
 
   const pending        = all.filter(r => r.status === 'pending_confirm')
   const pendingPayment = all.filter(r => r.status === 'pending_payment')
-  const noShowPending  = all.filter(r => r.status === 'no_show' && (!r.waitlist_resolution || r.waitlist_resolution === 'pending'))
+  const noShowPending  = all.filter(r => r.status === 'no_show' && r.payment_method === 'instapay' && (!r.waitlist_resolution || r.waitlist_resolution === 'pending'))
   const active         = all.filter(r => r.status === 'confirmed' || r.status === 'pending_confirm' || r.status === 'pending_payment')
 
   return (
@@ -995,15 +995,25 @@ export default function MyReservations() {
       {/* Pending warning banner */}
       {pending.length > 0 && (
         <div style={{
-          marginBottom:18, padding:'12px 16px',
-          background:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.35)',
-          borderRadius:12, display:'flex', alignItems:'center', gap:10,
+          marginBottom:18, padding:'14px 18px',
+          background:'rgba(245,158,11,0.1)', border:'1.5px solid rgba(245,158,11,0.45)',
+          borderRadius:12, display:'flex', alignItems:'flex-start', gap:12,
           color:'var(--amber)', fontWeight:600, fontSize:15,
         }}>
-          <AlertTriangle size={20}/>
-          {lang==='ar'
-            ? `لديك ${pending.length} حجز بانتظار تأكيدك — أكد قبل انتهاء المهلة وإلا سيُلغى تلقائياً`
-            : `You have ${pending.length} reservation(s) awaiting confirmation — confirm before the deadline or it will be auto-cancelled`}
+          <AlertTriangle size={22} style={{ flexShrink:0, marginTop:2 }}/>
+          <div>
+            {pending.map(r => {
+              const dl = r.confirm_deadline ? new Date(r.confirm_deadline) : null
+              const timeStr = dl ? dl.toLocaleTimeString(lang==='ar'?'ar-EG':'en-US', { hour:'2-digit', minute:'2-digit' }) : null
+              return (
+                <div key={r.id} style={{ marginBottom: pending.length > 1 ? 6 : 0 }}>
+                  {lang==='ar'
+                    ? <>⏳ حجزك لـ <strong>{r.trip_place}</strong> {r.schedule_time} بانتظار تأكيدك{timeStr ? <> — أكّد قبل <strong>{timeStr}</strong></> : ''} وإلا سيُلغى تلقائياً</>
+                    : <>⏳ Your booking for <strong>{r.trip_place_en||r.trip_place}</strong> {r.schedule_time} awaits confirmation{timeStr ? <> — confirm before <strong>{timeStr}</strong></> : ''} or it will be auto-cancelled</>}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

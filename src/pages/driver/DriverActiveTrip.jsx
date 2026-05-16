@@ -29,10 +29,12 @@ export default function DriverActiveTrip() {
 
   // Split round trips into two separate virtual entries for the driver
   const activeTrips = (trips||[])
-    .filter(t =>
-      (t.status === 'active' || t.status === 'pending' || t.status === 'in_progress') &&
-      myDriver && Number(t.driver_id) === Number(myDriver?.id)
-    )
+    .filter(t => {
+      if (t.status !== 'active' && t.status !== 'pending' && t.status !== 'in_progress') return false
+      if (user?.id && t.driver_userId && String(t.driver_userId) === String(user.id)) return true
+      if (myDriver && Number(t.driver_id) === Number(myDriver?.id)) return true
+      return false
+    })
     .flatMap(t => {
       if (t.trip_type !== 'round') return [t]
       return [

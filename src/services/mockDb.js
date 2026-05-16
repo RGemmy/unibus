@@ -271,7 +271,7 @@ function enrichTrip(trip) {
     ...trip,
     driver_id:             trip.driver_id || null,
     driver_name:           driver?.user_name || trip.driver_name || '',
-    driver_userId:         driver?.user_id || trip.driver_userId || null,
+    driver_userId:         findUserIdByName(driver?.user_name) || driver?.user_id || trip.driver_userId || null,
     bus_plate:             bus?.plate_number    || trip.bus_plate    || '',
     bus_plate_en:          bus?.plate_en        || trip.bus_plate_en || '',
     bus_capacity:          capacity,
@@ -509,17 +509,21 @@ export const mock = {
       }
     }
 
-    // ── Deadline = trip departure time MINUS 30 minutes ────────────────────────
-    // e.g. trip tomorrow at 06:30 → deadline = tomorrow 06:00
+    // ── Deadline: use what the form sent, or calculate from trip time ─────────
     let deadline
-    try {
-      const tripDate = d.trip_date || new Date().toISOString().split('T')[0]
-      const [hh, mm] = (d.schedule_time || '00:00').split(':').map(Number)
-      const depMs = new Date(`${tripDate}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`).getTime()
-      const deadlineMs = depMs - 30 * 60 * 1000 // always 30 min before departure
-      deadline = new Date(deadlineMs).toISOString()
-    } catch {
-      deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    if (d.confirm_deadline) {
+      // trust the deadline calculated in StudentTrips.jsx
+      deadline = d.confirm_deadline
+    } else {
+      try {
+        const tripDate = d.trip_date || new Date().toISOString().split('T')[0]
+        const [hh, mm] = (d.schedule_time || '00:00').split(':').map(Number)
+        const depMs = new Date(`${tripDate}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`).getTime()
+        const deadlineMs = depMs - 30 * 60 * 1000
+        deadline = new Date(deadlineMs).toISOString()
+      } catch {
+        deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      }
     }
     // If the deadline is already in the past (e.g. booked within 30 min of departure),
     // treat as instant: skip confirm flow, go straight to payment selection
@@ -846,11 +850,12 @@ export function runAutoNoShow() {
     const tripMin = th * 60 + tm
     if (currMin < tripMin + CUTOFF) return  // not yet 15 min past trip time
 
-    // Find confirmed+not-scanned reservations that departed — both instapay and cash
+    // Find confirmed+not-scanned reservations that departed — instapay only
     const noShows = reservations.filter(r =>
       Number(r.trip) === trip.id &&
       r.status === 'confirmed' &&
-      !r.scanned
+      !r.scanned &&
+      r.payment_method === 'instapay'
     )
 
     noShows.forEach(res => {

@@ -335,6 +335,7 @@ export default function StudentTrips() {
   const [paymentModal, setPaymentModal] = useState(null)  // { goRes, returnRes, total } — shown for combined payment
   const [roundBooking, setRoundBooking] = useState(false)  // true = book go+return together
   const [followUpModal, setFollowUpModal] = useState(null) // { bookedType:'go'|'return', tripDate, tripTime } — ask other direction
+  const [deadlineModal, setDeadlineModal] = useState(null) // { seatNumber, place, time, deadline } — show after booking
   const [payMethod,    setPayMethod]    = useState('cash')
   const [, setTick] = useState(0) // forces re-render every minute so passed trips disappear
   const { data: trips, loading, refetch } = useApi(getTrips)
@@ -597,34 +598,71 @@ export default function StudentTrips() {
       return
     }
 
-    // ── If GO booking in last 30 min → ask about return ──────────────────
+    // ── If GO booking (not instant, not subscription) → show deadline modal ──
     if (!isReturn) {
-      const msgAr = `✅ تم حجز الذهاب — مقعد ${seatNumber}`
-      const msgEn = `✅ Go booked — seat ${seatNumber}`
-      addLocalNotification(msgAr, 'success', null, msgEn)
-      // If within last 30 min of trip → ask if they want to book return too
-      if (isHalfHour) {
-        setFollowUpModal({ bookedType: 'go', tripDate: trip.trip_date, tripTime: actualTime })
-      } else {
-        navigate('/student/my-reservations')
-      }
+      setDeadlineModal({ seatNumber, place: placeAr, placeEn, time: actualTime, deadline })
       return
     }
 
-    // ── RETURN booking → ask about go if within 30 min ───────────────────────
-    const msgAr = `✅ تم حجز العودة — مقعد ${seatNumber}`
-    const msgEn = `✅ Return booked — seat ${seatNumber}`
-    addLocalNotification(msgAr, 'success', null, msgEn)
-    if (isHalfHour) {
-      setFollowUpModal({ bookedType: 'return', tripDate: trip.trip_date, tripTime: actualTime })
-    } else {
-      navigate('/student/my-reservations')
-    }
+    // ── RETURN booking → show deadline modal ─────────────────────────────────
+    setDeadlineModal({ seatNumber, place: placeAr, placeEn, time: actualTime, deadline })
   }
 
   return (
     <div style={{ padding: isMobile ? '16px 14px' : '28px 24px', maxWidth:1000, margin:'0 auto' }}>
       <ToastContainer toasts={toasts}/>
+      {/* ── Deadline modal: shown after normal booking ── */}
+      {deadlineModal && (() => {
+        const dl = deadlineModal.deadline
+        const timeStr = dl.toLocaleTimeString(lang==='ar'?'ar-EG':'en-US', { hour:'2-digit', minute:'2-digit' })
+        const minsLeft = Math.max(0, Math.round((dl.getTime() - Date.now()) / 60000))
+        return (
+          <div style={{ position:'fixed', inset:0, zIndex:3000, background:'rgba(0,0,0,0.82)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div style={{ background:'var(--navy-2)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth:420, padding:32, boxShadow:'0 32px 80px rgba(0,0,0,0.7)', animation:'fadeUp 0.25s ease', textAlign:'center' }}>
+              <div style={{ fontSize:52, marginBottom:8 }}>🎫</div>
+              <h3 style={{ fontSize:20, fontWeight:900, marginBottom:6 }}>
+                {lang==='ar' ? 'تم حجز مقعدك بنجاح!' : 'Seat booked successfully!'}
+              </h3>
+              <p style={{ color:'var(--text-muted)', fontSize:14, marginBottom:20 }}>
+                {lang==='ar'
+                  ? `${lang==='ar' ? deadlineModal.place : deadlineModal.placeEn} · مقعد ${deadlineModal.seatNumber} · ${deadlineModal.time}`
+                  : `${deadlineModal.placeEn || deadlineModal.place} · Seat ${deadlineModal.seatNumber} · ${deadlineModal.time}`}
+              </p>
+
+              {/* Deadline banner */}
+              <div style={{ background:'rgba(245,158,11,0.1)', border:'1.5px solid rgba(245,158,11,0.45)', borderRadius:14, padding:'16px 18px', marginBottom:24 }}>
+                <div style={{ fontSize:28, marginBottom:6 }}>⏳</div>
+                <div style={{ fontSize:16, fontWeight:800, color:'var(--amber)', marginBottom:4 }}>
+                  {lang==='ar' ? `أكّد حجزك قبل الساعة ${timeStr}` : `Confirm before ${timeStr}`}
+                </div>
+                <div style={{ fontSize:13, color:'var(--text-muted)' }}>
+                  {lang==='ar'
+                    ? `لديك ${minsLeft} دقيقة — لو ما أكدتش سيُلغى الحجز تلقائياً وترجع الكرسي`
+                    : `You have ${minsLeft} min — if not confirmed the seat will be auto-released`}
+                </div>
+              </div>
+
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ width:'100%', fontSize:16, fontWeight:700, padding:'13px' }}
+                  onClick={() => { setDeadlineModal(null); navigate('/student/my-reservations') }}
+                >
+                  {lang==='ar' ? '📋 اذهب لحجوزاتي لتأكيد الدفع' : '📋 Go to My Reservations to confirm'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ width:'100%', fontSize:14 }}
+                  onClick={() => setDeadlineModal(null)}
+                >
+                  {lang==='ar' ? 'تصفح رحلات أخرى' : 'Browse more trips'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── Follow-up modal: ask about the other direction after booking in last 30 min ── */}
       {followUpModal && (
         <div style={{ position:'fixed', inset:0, zIndex:3000, background:'rgba(0,0,0,0.75)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>

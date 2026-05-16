@@ -26,20 +26,21 @@ export default function DriverTrips() {
   const { data: drivers, loading: dl } = useApi(getDrivers)
 
   const myDriver = (drivers||[]).find(d =>
-    d.user_name === user?.user_name ||
-    d.user_id   === user?.id ||
-    d.email     === user?.email
+    (user?.user_name && d.user_name === user.user_name) ||
+    (user?.email     && d.email     === user.email)
   )
 
   // الرحلات المُعيَّنة — بس اللي لسه ما اتكملتش
-  // الرحلات ذهاب وعودة تظهر كـ رحلتين منفصلتين
+  // نطابق بـ driver_userId (الـ auth id الحقيقي) أو بـ driver_id + myDriver
   const myTrips = (trips||[])
-    .filter(tr =>
-      myDriver &&
-      Number(tr.driver_id) === Number(myDriver.id) &&
-      tr.status !== 'completed' &&
-    tr.status !== 'cancelled'
-    )
+    .filter(tr => {
+      if (tr.status === 'completed' || tr.status === 'cancelled') return false
+      // match by real auth user id
+      if (user?.id && tr.driver_userId && String(tr.driver_userId) === String(user.id)) return true
+      // fallback: match by driver record
+      if (myDriver && Number(tr.driver_id) === Number(myDriver.id)) return true
+      return false
+    })
     .flatMap(tr => {
       if (tr.trip_type !== 'round') return [tr]
       return [

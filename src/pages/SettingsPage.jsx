@@ -33,17 +33,63 @@ export default function SettingsPage() {
       const raw = localStorage.getItem('demoDB')
       if (raw) {
         const db = JSON.parse(raw)
-        // احذف حجوزات الشخص ده بس
         if (db.reservations) {
           db.reservations = db.reservations.filter(r =>
             String(r.student) !== String(uid) && String(r.userId) !== String(uid)
           )
         }
-        // احذف payments بتاعته بس
         if (db.payments) {
           db.payments = db.payments.filter(p => String(p.student) !== String(uid))
         }
         localStorage.setItem('demoDB', JSON.stringify(db))
+      }
+    } catch(e) { console.error(e) }
+
+    // مسح حجوزاته من mock_reservations + تحرير الكراسي في الرحلات
+    try {
+      const raw = localStorage.getItem('mock_reservations')
+      if (raw) {
+        const list = JSON.parse(raw)
+        const mine    = list.filter(r => String(r.student) === String(uid) || String(r.userId) === String(uid))
+        const filtered = list.filter(r => String(r.student) !== String(uid) && String(r.userId) !== String(uid))
+        localStorage.setItem('mock_reservations', JSON.stringify(filtered))
+
+        // تحرير الكراسي في mock_trips
+        const tripsRaw = localStorage.getItem('mock_trips')
+        if (tripsRaw && mine.length > 0) {
+          const trips = JSON.parse(tripsRaw)
+          mine.forEach(res => {
+            if (!res.seat_number) return
+            const ti = trips.findIndex(t => t.id === Number(res.trip))
+            if (ti === -1) return
+            const trip = trips[ti]
+            // حرر الكرسي في seats array
+            if (Array.isArray(trip.seats)) {
+              const seatIndex = parseInt(res.seat_number) - 1
+              if (seatIndex >= 0 && seatIndex < trip.seats.length) {
+                trip.seats[seatIndex] = false
+              }
+              // أو ابحث بالاسم (مثلاً "1B")
+              if (trip.seat_map) {
+                trip.seat_map = trip.seat_map.map(s =>
+                  s && s.label === res.seat_number ? null : s
+                )
+              }
+            }
+            trip.available_seats = (trip.available_seats || 0) + 1
+          })
+          localStorage.setItem('mock_trips', JSON.stringify(trips))
+        }
+      }
+    } catch(e) { console.error(e) }
+
+    // مسح waitlist بتاعته
+    try {
+      const raw = localStorage.getItem('mock_waitlist')
+      if (raw) {
+        const list = JSON.parse(raw)
+        const filtered = list.filter(w => String(w.student) !== String(uid))
+        localStorage.setItem('mock_waitlist', JSON.stringify(filtered))
       }
     } catch(e) { console.error(e) }
 

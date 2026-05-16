@@ -716,6 +716,11 @@ export default function BusModReservations() {
                         ) : (
                           <span className={`badge ${statusCfg[r.status]?.cls||'badge-blue'}`}>{statusCfg[r.status]?.label||r.status}</span>
                         )}
+                        {r.scanned && (
+                          <span style={{ display:'inline-block', marginTop:4, fontSize:11, background:'rgba(16,185,129,0.15)', color:'#34d399', border:'1px solid rgba(16,185,129,0.4)', borderRadius:6, padding:'2px 8px', fontWeight:700 }}>
+                            {lang==='ar'?'✅ ركب':'✅ Boarded'}
+                          </span>
+                        )}
                       </td>
                       {/* Countdown — only in upcoming mode */}
                       {viewMode === 'today' && (
