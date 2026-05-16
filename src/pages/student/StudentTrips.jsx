@@ -334,6 +334,7 @@ export default function StudentTrips() {
   const [pendingGoRes, setPendingGoRes] = useState(null) // holds go reservation awaiting return seat pick
   const [paymentModal, setPaymentModal] = useState(null)  // { goRes, returnRes, total } — shown for combined payment
   const [roundBooking, setRoundBooking] = useState(false)  // true = book go+return together
+  const [followUpModal, setFollowUpModal] = useState(null) // { bookedType:'go'|'return', tripDate, tripTime } — ask other direction
   const [payMethod,    setPayMethod]    = useState('cash')
   const [, setTick] = useState(0) // forces re-render every minute so passed trips disappear
   const { data: trips, loading, refetch } = useApi(getTrips)
@@ -596,25 +597,76 @@ export default function StudentTrips() {
       return
     }
 
-    // ── If GO booking: navigate to my reservations directly ──────────────────
+    // ── If GO booking in last 30 min → ask about return ──────────────────
     if (!isReturn) {
       const msgAr = `✅ تم حجز الذهاب — مقعد ${seatNumber}`
       const msgEn = `✅ Go booked — seat ${seatNumber}`
       addLocalNotification(msgAr, 'success', null, msgEn)
-      navigate('/student/my-reservations')
+      // If within last 30 min of trip → ask if they want to book return too
+      if (isHalfHour) {
+        setFollowUpModal({ bookedType: 'go', tripDate: trip.trip_date, tripTime: actualTime })
+      } else {
+        navigate('/student/my-reservations')
+      }
       return
     }
 
-    // ── RETURN booking → navigate to my reservations ──────────────────────────
+    // ── RETURN booking → ask about go if within 30 min ───────────────────────
     const msgAr = `✅ تم حجز العودة — مقعد ${seatNumber}`
     const msgEn = `✅ Return booked — seat ${seatNumber}`
     addLocalNotification(msgAr, 'success', null, msgEn)
-    navigate('/student/my-reservations')
+    if (isHalfHour) {
+      setFollowUpModal({ bookedType: 'return', tripDate: trip.trip_date, tripTime: actualTime })
+    } else {
+      navigate('/student/my-reservations')
+    }
   }
 
   return (
     <div style={{ padding: isMobile ? '16px 14px' : '28px 24px', maxWidth:1000, margin:'0 auto' }}>
       <ToastContainer toasts={toasts}/>
+      {/* ── Follow-up modal: ask about the other direction after booking in last 30 min ── */}
+      {followUpModal && (
+        <div style={{ position:'fixed', inset:0, zIndex:3000, background:'rgba(0,0,0,0.75)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'var(--navy-2)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth:400, padding:32, boxShadow:'0 32px 80px rgba(0,0,0,0.6)', animation:'fadeUp 0.25s ease', textAlign:'center' }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🚌</div>
+            <h3 style={{ fontSize:20, fontWeight:800, marginBottom:10 }}>
+              {lang==='ar'
+                ? (followUpModal.bookedType==='go' ? 'هل تريد حجز العودة أيضاً؟' : 'هل تريد حجز الذهاب أيضاً؟')
+                : (followUpModal.bookedType==='go' ? 'Book return trip too?' : 'Book outbound trip too?')
+              }
+            </h3>
+            <p style={{ color:'var(--text-muted)', fontSize:15, marginBottom:24, lineHeight:1.6 }}>
+              {lang==='ar'
+                ? 'لقد حجزت رحلة في آخر نصف ساعة — هل تريد حجز الاتجاه الآخر وتدفع الاثنين معاً؟'
+                : 'You booked a trip in the last 30 minutes — book the other direction and pay for both together?'
+              }
+            </p>
+            <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
+              <button
+                onClick={() => {
+                  setFollowUpModal(null)
+                  // Switch to the other tab
+                  setTripTab(followUpModal.bookedType === 'go' ? 'return' : 'go')
+                  setBookingAs(followUpModal.bookedType === 'go' ? 'return' : 'go')
+                  // Scroll to top
+                  window.scrollTo({ top:0, behavior:'smooth' })
+                }}
+                style={{ padding:'11px 22px', borderRadius:10, border:'none', cursor:'pointer', background:'var(--calm)', color:'white', fontSize:16, fontWeight:700, flex:1, minWidth:120 }}
+              >
+                {lang==='ar' ? 'نعم، احجز' : 'Yes, book it'}
+              </button>
+              <button
+                onClick={() => { setFollowUpModal(null); navigate('/student/my-reservations') }}
+                style={{ padding:'11px 22px', borderRadius:10, border:'1px solid var(--border)', cursor:'pointer', background:'var(--surface)', color:'var(--text-secondary)', fontSize:16, fontWeight:600, flex:1, minWidth:120 }}
+              >
+                {lang==='ar' ? 'لا، شكراً' : 'No thanks'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {seatTrip && <SeatMap trip={seatTrip} lang={lang} onBook={handleBook} onClose={()=>{ setSeatTrip(null) }} myReservations={myReservations} userId={String(user?.id||'')} hasSubscription={hasSubscription} bookingAs={bookingAs} isHalfHourBooking={seatTrip.trip_date === todayStr && isDepartingWithin30(seatTrip.schedule_time)} pendingGoPrice={0}/>}
 
       <div style={{ marginBottom:20, display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>

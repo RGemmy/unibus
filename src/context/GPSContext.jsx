@@ -46,15 +46,8 @@ export function GPSProvider({ children }) {
     setError(null)
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
-        // Simulate GPS for demo (use Port Said coords)
-        const demoPos = { lat: 31.2653, lng: 32.3019, accuracy: 10 }
-        setPosition(demoPos)
-        setPath([demoPos])
-        setTracking(true)
-        setActiveTripId(tripId)
-        localStorage.setItem(ACTIVE_KEY, JSON.stringify({ tripId, position: demoPos, timestamp: Date.now() }))
-        localStorage.setItem(GPS_PREFIX + tripId, JSON.stringify({ ...demoPos, timestamp: Date.now() }))
-        resolve(true)
+        setError('جهازك لا يدعم GPS')
+        resolve(false)
         return
       }
 
@@ -81,15 +74,9 @@ export function GPSProvider({ children }) {
           resolve(true)
         },
         (err) => {
-          // GPS denied — use demo position
-          const demoPos = { lat: 31.2653 + (Math.random()-0.5)*0.01, lng: 32.3019 + (Math.random()-0.5)*0.01, accuracy: 15 }
-          setPosition(demoPos)
-          setPath([demoPos])
-          setTracking(true)
-          setActiveTripId(tripId)
-          localStorage.setItem(ACTIVE_KEY, JSON.stringify({ tripId, position: demoPos, timestamp: Date.now() }))
-          localStorage.setItem(GPS_PREFIX + tripId, JSON.stringify({ ...demoPos, timestamp: Date.now() }))
-          resolve(true)
+          // GPS denied — show clear error to driver
+          setError(lang_ref || 'GPS مرفوض — يرجى السماح بالموقع من إعدادات المتصفح')
+          resolve(false)
         },
         { enableHighAccuracy: true, timeout: 8000 }
       )
@@ -111,18 +98,7 @@ export function GPSProvider({ children }) {
     setActiveTripId(null)
   }, [activeTripId])
 
-  // Simulate slight movement for demo purposes
-  useEffect(() => {
-    if (!tracking || !position) return
-    const sim = setInterval(() => {
-      setPosition(prev => prev ? {
-        ...prev,
-        lat: prev.lat + (Math.random() - 0.5) * 0.0001,
-        lng: prev.lng + (Math.random() - 0.5) * 0.0001,
-      } : prev)
-    }, 3000)
-    return () => clearInterval(sim)
-  }, [tracking])
+  // NOTE: No fake movement simulation — real GPS watchPosition handles updates
 
   return (
     <GPSContext.Provider value={{ tracking, position, error, path, activeTripId, startTrip, endTrip }}>

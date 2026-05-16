@@ -19,17 +19,41 @@ function haversine(lat1, lng1, lat2, lng2) {
 // ── Fetch OSRM route between two points ──────────────────────────────────────
 async function fetchRoute(from, to) {
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&annotations=true`
     const res  = await fetch(url)
     const data = await res.json()
     if (data.routes?.[0]) {
-      const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng])
-      const distKm = data.routes[0].distance / 1000
-      const durMin = Math.round(data.routes[0].duration / 60)
-      return { coords, distKm, durMin }
+      const coords  = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng])
+      const distKm  = data.routes[0].distance / 1000
+      const durMin  = Math.round(data.routes[0].duration / 60)
+      // Speed = dist / time → compare to straight-line speed to estimate congestion
+      const speedKph = distKm / (data.routes[0].duration / 3600)
+      return { coords, distKm, durMin, speedKph }
     }
   } catch {}
   return null
+}
+
+// ── Real traffic estimate from OSRM speed ─────────────────────────────────────
+// speedKph: actual driving speed from OSRM
+// distKm: route distance
+// Returns traffic level + ETA
+function calcTrafficFromOSRM(speedKph, durMin) {
+  // Urban Egypt: free flow ~45-60 kph, rush hour ~15-25 kph
+  let traffic
+  if      (speedKph >= 40) traffic = 'clear'
+  else if (speedKph >= 22) traffic = 'moderate'
+  else                     traffic = 'heavy'
+
+  // Rush-hour bonus based on time of day
+  const h = new Date().getHours()
+  const isRush = (h >= 7 && h <= 9) || (h >= 14 && h <= 16)
+  if (isRush && traffic === 'clear') traffic = 'moderate'
+
+  const arrivalTime = new Date(Date.now() + durMin * 60000)
+    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+  return { minutes: durMin, arrivalTime, traffic, isRush, speedKph: Math.round(speedKph) }
 }
 
 // ── Real Leaflet Map ──────────────────────────────────────────────────────────
@@ -118,24 +142,7 @@ function LiveMap({ busPos, myPos, routeCoords, lang }) {
   return <div ref={mapRef} style={{ width:'100%', height:380, borderRadius:14, overflow:'hidden', zIndex:1 }}/>
 }
 
-// ── Traffic estimate ──────────────────────────────────────────────────────────
-function useTrafficEstimate(tripActive) {
-  const [est, setEst] = useState(null)
-  useEffect(() => {
-    if (!tripActive) { setEst(null); return }
-    const calc = () => {
-      const h = new Date().getHours()
-      const isRush = (h>=7&&h<=9)||(h>=14&&h<=16)
-      const base = 8 + Math.floor(Math.random()*7)
-      const extra = isRush ? Math.floor(Math.random()*10)+5 : 0
-      const total = base + extra
-      const arr = new Date(Date.now() + total*60000)
-      setEst({ minutes:total, arrivalTime:arr.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), isRush, traffic:isRush?'heavy':total>12?'moderate':'clear' })
-    }
-    calc(); const id = setInterval(calc, 30000); return () => clearInterval(id)
-  }, [tripActive])
-  return est
-}
+
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function StudentTrack() {
@@ -147,11 +154,12 @@ export default function StudentTrack() {
   const [routeInfo,   setRouteInfo]   = useState(null)
   const [remainDist,  setRemainDist]  = useState(null)
 
+  const [estimate,    setEstimate]    = useState(null)
+
   const confirmedRes = (reservations||[]).filter(r => r.status === 'confirmed')
   const activeTrip   = confirmedRes[0]
   const isScanned    = activeTrip?.scanned === true
   const { busPos, tripActive, lastUpdate } = useBusTracking(isScanned ? (activeTrip?.trip || activeTrip?.id) : null)
-  const estimate = useTrafficEstimate(tripActive && isScanned)
 
   // Watch my real GPS
   useEffect(() => {
@@ -164,13 +172,32 @@ export default function StudentTrack() {
     return () => navigator.geolocation.clearWatch(id)
   }, [])
 
-  // Fetch route from bus to me
+  // Fetch route from bus to me — drives ETA + traffic from real OSRM data
   useEffect(() => {
-    if (!busPos || !myPos) return
+    if (!busPos || !myPos) { setEstimate(null); return }
     fetchRoute(busPos, myPos).then(info => {
-      if (info) { setRouteCoords(info.coords); setRouteInfo({ distKm: info.distKm, durMin: info.durMin }) }
+      if (!info) return
+      setRouteCoords(info.coords)
+      setRouteInfo({ distKm: info.distKm, durMin: info.durMin })
+      const est = calcTrafficFromOSRM(info.speedKph, info.durMin)
+      setEstimate(est)
     })
   }, [busPos?.lat, busPos?.lng, myPos?.lat, myPos?.lng])
+
+  // Count down arrival time every minute without re-fetching
+  useEffect(() => {
+    if (!estimate) return
+    const id = setInterval(() => {
+      setEstimate(prev => {
+        if (!prev) return prev
+        const newMin = Math.max(0, prev.minutes - 1)
+        const arrivalTime = new Date(Date.now() + newMin * 60000)
+          .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        return { ...prev, minutes: newMin, arrivalTime }
+      })
+    }, 60000)
+    return () => clearInterval(id)
+  }, [!!estimate])
 
   // Remaining straight-line distance
   useEffect(() => {
@@ -229,6 +256,11 @@ export default function StudentTrack() {
                 <div style={{ fontSize:16, fontWeight:700, color:trafficColor[estimate.traffic] }}>
                   {trafficLabel[estimate.traffic]}
                 </div>
+                {estimate.speedKph != null && (
+                  <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:2 }}>
+                    ~{estimate.speedKph} {lang==='ar'?'كم/ساعة':'km/h'}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -315,11 +347,18 @@ export default function StudentTrack() {
             )}
           </div>
 
-          {busPos && (
-            <div style={{ textAlign:'center', marginBottom:14 }}>
-              <a href={`https://maps.google.com/?q=${busPos.lat},${busPos.lng}`} target="_blank" rel="noreferrer" className="btn btn-secondary">
-                <MapPin size={16}/> {lang==='ar'?'افتح في خرائط جوجل':'Open in Google Maps'}
-              </a>
+          {(busPos || myPos) && (
+            <div style={{ display:'flex', justifyContent:'center', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+              {busPos && (
+                <a href={`https://maps.google.com/?q=${busPos.lat},${busPos.lng}`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+                  <MapPin size={16}/> {lang==='ar'?'افتح في خرائط جوجل':'Open in Google Maps'}
+                </a>
+              )}
+              {myPos && (
+                <a href={`https://maps.google.com/?q=${myPos.lat},${myPos.lng}`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+                  <Navigation size={16}/> {lang==='ar'?'شارك موقعي':'Share my location'}
+                </a>
+              )}
             </div>
           )}
         </>

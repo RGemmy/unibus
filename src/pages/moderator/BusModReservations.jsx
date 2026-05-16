@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { BookOpen, Search, Trash2, Timer, History, Calendar, QrCode, X, CheckCircle, User, AlertTriangle } from 'lucide-react'
 import { useApi, useToast } from '../../hooks/useApi'
-import { getReservations, cancelReservation, autoExpireReservations } from '../../services/api'
+import { getReservations, cancelReservation, autoExpireReservations, updateReservation } from '../../services/api'
 import { useLanguage } from '../../context/LanguageContext'
 import EmptyState from '../../components/EmptyState'
 import ToastContainer from '../../components/Toast'
@@ -43,11 +43,13 @@ function Countdown({ deadlineISO, lang }) {
 
 
 // ── QR Scanner Modal for Supervisor — Camera-based using jsQR ────────────────
-function QRScannerModal({ allReservations, lang, onClose }) {
+function QRScannerModal({ allReservations, lang, onClose, onScanned }) {
   const [scanResult,   setScanResult]   = useState(null)
   const [scanError,    setScanError]    = useState('')
   const [camError,     setCamError]     = useState('')
   const [scanning,     setScanning]     = useState(true)
+  const [marked,       setMarked]       = useState(false)
+  const [marking,      setMarking]      = useState(false)
   const videoRef  = useRef()
   const canvasRef = useRef()
   const streamRef = useRef()
@@ -156,12 +158,23 @@ function QRScannerModal({ allReservations, lang, onClose }) {
     setScanResult(null)
     setScanError('')
     setScanning(true)
+    setMarked(false)
     // Restart camera
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
       .then(stream => {
         streamRef.current = stream
         if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play() }
       }).catch(() => {})
+  }
+
+  async function doMarkScanned(id) {
+    setMarking(true)
+    try {
+      await updateReservation(id, { scanned: true })
+      setMarked(true)
+      if (onScanned) onScanned(id)
+    } catch {}
+    setMarking(false)
   }
 
   const res = scanResult?.reservation
@@ -287,6 +300,31 @@ function QRScannerModal({ allReservations, lang, onClose }) {
                     <span style={{ fontSize:14,fontWeight:700 }}>{row.val||'—'}</span>
                   </div>
                 ))}
+
+                {/* Mark scanned / success */}
+                {isConfirmed && (
+                  marked ? (
+                    <div style={{ marginTop:16,padding:'14px 16px',background:'rgba(16,185,129,0.12)',border:'1.5px solid rgba(16,185,129,0.5)',borderRadius:12,display:'flex',alignItems:'center',gap:12 }}>
+                      <CheckCircle size={26} color="#34d399"/>
+                      <div>
+                        <div style={{ fontSize:16,fontWeight:800,color:'#34d399' }}>
+                          {lang==='ar'?'✅ تم الاسكان — الطالب يرى الخريطة الآن':'✅ Checked in — Student can see GPS now'}
+                        </div>
+                        <div style={{ fontSize:13,color:'var(--text-muted)',marginTop:2 }}>
+                          {lang==='ar'?'خريطة الباص ظهرت للطالب تلقائياً':'Bus map is now visible to the student'}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => doMarkScanned(res.id)} className="btn btn-primary"
+                      style={{ width:'100%',marginTop:16,display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}
+                      disabled={marking}>
+                      {marking
+                        ? <div style={{ width:15,height:15,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin 0.7s linear infinite' }}/>
+                        : <><CheckCircle size={16}/> {lang==='ar'?'تأكيد الاسكان':'Confirm Check-in'}</>}
+                    </button>
+                  )
+                )}
 
                 <button onClick={handleRescan} className="btn btn-secondary" style={{ width:'100%',marginTop:16,display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
                   <QrCode size={16}/> {lang==='ar'?'🔄 مسح تذكرة أخرى':'🔄 Scan Another Ticket'}
@@ -441,6 +479,7 @@ export default function BusModReservations() {
           allReservations={(reservations||[])}
           lang={lang}
           onClose={() => setShowScanner(false)}
+          onScanned={() => { setShowScanner(false); refetch() }}
         />
       )}
 

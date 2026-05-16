@@ -10,7 +10,7 @@ export default function SettingsPage() {
   const isMobile = useIsMobile()
   const { lang, switchLang, t } = useLanguage()
   const { clearNotifications }   = useNotifications()
-  const { logout }               = useAuth()
+  const { logout, user }          = useAuth()
   const { theme, toggleTheme }   = useTheme()
   const [cleared, setCleared]    = useState(false)
 
@@ -20,13 +20,40 @@ export default function SettingsPage() {
   ]
 
   const handleClearData = () => {
-    if (!confirm(lang==='ar'?'سيتم مسح جميع البيانات المحلية (الرحلات، الحجوزات، الباصات، الإشعارات). هل تريد المتابعة؟':'This will clear all local data (trips, reservations, buses, notifications). Continue?')) return
-    // Clear all mock data keys
-    const keysToRemove = Object.keys(localStorage).filter(k =>
-      k.startsWith('mock_') || k.startsWith('notifications_') || k === 'demoDB' || k.startsWith('gps_')
-    )
-    keysToRemove.forEach(k => localStorage.removeItem(k))
+    if (!confirm(lang==='ar'
+      ? 'سيتم مسح بياناتك الشخصية فقط (حجوزاتك، إشعاراتك). هل تريد المتابعة؟'
+      : 'This will clear only your personal data (your reservations, notifications). Continue?'
+    )) return
+
+    const uid = user?.id
+    if (!uid) return
+
+    // مسح بيانات الفرد بس من الـ demoDB
+    try {
+      const raw = localStorage.getItem('demoDB')
+      if (raw) {
+        const db = JSON.parse(raw)
+        // احذف حجوزات الشخص ده بس
+        if (db.reservations) {
+          db.reservations = db.reservations.filter(r =>
+            String(r.student) !== String(uid) && String(r.userId) !== String(uid)
+          )
+        }
+        // احذف payments بتاعته بس
+        if (db.payments) {
+          db.payments = db.payments.filter(p => String(p.student) !== String(uid))
+        }
+        localStorage.setItem('demoDB', JSON.stringify(db))
+      }
+    } catch(e) { console.error(e) }
+
+    // مسح الإشعارات بتاعته بس
+    localStorage.removeItem(`notifications_${uid}`)
     clearNotifications()
+
+    // مسح GPS بتاعه
+    localStorage.removeItem(`gps_${uid}`)
+
     setCleared(true)
     setTimeout(() => setCleared(false), 3000)
   }
@@ -108,7 +135,7 @@ export default function SettingsPage() {
       {/* Clear data */}
       <div className="card" style={{ padding:24, border:'1px solid rgba(239,68,68,0.2)' }}>
         <h3 style={{ fontSize:19, fontWeight:700, marginBottom:4, display:'flex', alignItems:'center', gap:8, color:'var(--red-light)' }}>
-          <Trash2 size={22}/> {lang==='ar'?'مسح البيانات المحلية':'Clear Local Data'}
+          <Trash2 size={22}/> {lang==='ar'?'مسح بياناتي الشخصية':'Clear My Personal Data'}
         </h3>
         <p style={{ color:'var(--text-muted)', fontSize:16, marginBottom:16 }}>
           {lang==='ar'
@@ -118,7 +145,7 @@ export default function SettingsPage() {
         <div style={{ padding:'12px 14px', background:'rgba(239,68,68,0.06)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:9, marginBottom:16, display:'flex', gap:10 }}>
           <AlertTriangle size={18} color="var(--red-light)" style={{ flexShrink:0, marginTop:1 }}/>
           <p style={{ fontSize:15, color:'var(--red-light)', lineHeight:1.6 }}>
-            {lang==='ar'?'هذا الإجراء لا يمكن التراجع عنه. ستحتاج لتسجيل الدخول مرة أخرى.':'This action cannot be undone. You will need to log in again.'}
+            {lang==='ar'?'هذا الإجراء لا يمكن التراجع عنه.':'This action cannot be undone.'}
           </p>
         </div>
         {cleared ? (
@@ -127,7 +154,7 @@ export default function SettingsPage() {
           </div>
         ) : (
           <button className="btn btn-danger" onClick={handleClearData}>
-            <Trash2 size={18}/> {lang==='ar'?'مسح جميع البيانات':'Clear All Data'}
+            <Trash2 size={18}/> {lang==='ar'?'مسح بياناتي':'Clear My Data'}
           </button>
         )}
       </div>

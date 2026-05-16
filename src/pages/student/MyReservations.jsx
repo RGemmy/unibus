@@ -270,13 +270,20 @@ function QRTicketModal({ r, lang, onClose }) {
             { icon:'📅', label:lang==='ar'?'التاريخ':'Date', val: r.trip_date },
             { icon:'🕐', label:lang==='ar'?'الوقت':'Time', val: r.schedule_time },
             { icon:'💺', label:lang==='ar'?'المقعد':'Seat', val: String(r.seat_number) },
-            { icon:'💳', label:lang==='ar'?'الدفع':'Payment', val: r.payment_method==='instapay'?'InstaPay':r.payment_method==='subscription'?(lang==='ar'?'اشتراك':'Subscription'):(lang==='ar'?'كاش':'Cash') },
           ].map(row => (
             <div key={row.label} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 16px',borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
               <span style={{ color:'var(--text-muted)',fontSize:14 }}>{row.icon} {row.label}</span>
               <span style={{ fontWeight:700,fontSize:14 }}>{row.val}</span>
             </div>
           ))}
+
+          {/* Payment method row */}
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 16px',borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ color:'var(--text-muted)',fontSize:14 }}>{lang==='ar'?'طريقة الدفع':'Payment'}</span>
+            <span style={{ fontWeight:700,fontSize:14 }}>
+              {r.payment_method==='instapay' ? 'InstaPay' : r.payment_method==='subscription' ? (lang==='ar'?'اشتراك':'Subscription') : (lang==='ar'?'كاش':'Cash')}
+            </span>
+          </div>
 
           <div style={{ marginTop:16,padding:'8px 14px',background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:10,fontSize:13,color:'#34d399',fontWeight:600 }}>
             ✅ {lang==='ar'?'الحجز مؤكد — يُسمح بالركوب':'Booking Confirmed — Boarding Allowed'}
